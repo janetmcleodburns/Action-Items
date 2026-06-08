@@ -7,6 +7,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Action Items" />
   <meta name="theme-color" content="#f5f5f5" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
   <title>Action Items</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet" />
@@ -196,8 +198,8 @@
 
     <!-- Status filters -->
     <div class="filter-row">
-      <button class="filter-btn" id="fb-all" onclick="setFilter('all')">All <span class="filter-count" id="fc-all"></span></button>
-      <button class="filter-btn active-filter" id="fb-active" onclick="setFilter('active')">Active <span class="filter-count" id="fc-active"></span></button>
+      <button class="filter-btn active-filter" id="fb-all" onclick="setFilter('all')">All <span class="filter-count" id="fc-all"></span></button>
+      <button class="filter-btn" id="fb-active" onclick="setFilter('active')">Active <span class="filter-count" id="fc-active"></span></button>
       <button class="filter-btn" id="fb-done" onclick="setFilter('done')">Done <span class="filter-count" id="fc-done"></span></button>
     </div>
     <div class="cat-filter-row" id="catFilterRow"></div>
@@ -214,7 +216,7 @@
   };
 
   let items = [], categories = [];
-  let filter = 'active', catFilter = '', priority = 'medium';
+  let filter = 'all', catFilter = '', priority = 'medium';
   let editId = null, catManagerOpen = false;
 
   // --- Storage ---
@@ -223,7 +225,10 @@
     try { categories = JSON.parse(localStorage.getItem('action-cats') || '["Work","Personal","Home"]'); } catch { categories = ['Work','Personal','Home']; }
   }
   function save() {
-    try { localStorage.setItem('action-items', JSON.stringify(items)); } catch {}
+    try {
+      const itemsJson = JSON.stringify(items);
+      localStorage.setItem('action-items', itemsJson);
+    } catch(e) { console.warn('Save failed:', e); }
     try { localStorage.setItem('action-cats', JSON.stringify(categories)); } catch {}
   }
   function generateId() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
@@ -323,9 +328,9 @@
   function renderCatFilter() {
     const row = document.getElementById('catFilterRow');
     if (categories.length === 0) { row.innerHTML = ''; return; }
-    row.innerHTML = categories.map(c => `<button class="cat-filter-btn ${catFilter===c?'active-cat-filter':''}" onclick="setCatFilter('${escHtml(c)}')">${escHtml(c)}</button>`).join('');
+    row.innerHTML = categories.map(c => `<button class="cat-filter-btn ${catFilter.trim().toLowerCase()===c.trim().toLowerCase()?'active-cat-filter':''}" onclick="setCatFilter('${escHtml(c)}')">${escHtml(c)}</button>`).join('');
   }
-  function setCatFilter(c) { catFilter = catFilter === c ? '' : c; renderCatFilter(); render(); }
+  function setCatFilter(c) { catFilter = catFilter.trim().toLowerCase() === c.trim().toLowerCase() ? '' : c.trim(); renderCatFilter(); render(); }
 
   // --- Status filter ---
   function setFilter(f) {
@@ -341,10 +346,20 @@
     if (!text) return;
     const dueDate = document.getElementById('dateInput').value;
     const category = document.getElementById('catSelect').value;
-    items.unshift({ id: generateId(), text, priority, done: false, dueDate, category, createdAt: Date.now() });
+    const newItem = { id: generateId(), text, priority, done: false, dueDate, category, createdAt: Date.now() };
+    items.unshift(newItem);
     input.value = ''; document.getElementById('dateInput').value = ''; document.getElementById('catSelect').value = '';
     setMicStatus('', false);
-    save(); render(); input.focus();
+    save();
+    // Always show all items after adding so new item is always visible
+    filter = 'all';
+    catFilter = '';
+    ['all','active','done'].forEach(x => {
+      document.getElementById('fb-' + x).className = 'filter-btn' + (x === 'all' ? ' active-filter' : '');
+    });
+    renderCatFilter();
+    render();
+    input.focus();
   }
   function toggleDone(id) { const item = items.find(i => i.id===id); if (item) { item.done = !item.done; save(); render(); } }
   function deleteItem(id) { items = items.filter(i => i.id!==id); save(); render(); }
@@ -369,7 +384,7 @@
     document.getElementById('fc-done').textContent = doneCount ? `(${doneCount})` : '';
     const visible = items.filter(i => {
       const statusOk = filter==='active' ? !i.done : filter==='done' ? i.done : true;
-      const catOk = catFilter ? i.category===catFilter : true;
+      const catOk = catFilter ? (i.category||'').trim().toLowerCase() === catFilter.trim().toLowerCase() : true;
       return statusOk && catOk;
     }).sort((a,b) => { if (a.done!==b.done) return a.done?1:-1; return pOrder[a.priority]-pOrder[b.priority]; });
     const list = document.getElementById('list');
@@ -428,7 +443,9 @@
   }
 
   // --- Init ---
-  setPriority('medium'); load(); renderCategoryManager(); renderCatFilter(); renderCatSelect(); render(); initMic();
+  window.addEventListener('load', function() {
+    setPriority('medium'); load(); renderCategoryManager(); renderCatFilter(); renderCatSelect(); render(); initMic();
+  });
 </script>
 </body>
 </html>
